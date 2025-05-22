@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## Task 1: Create Resources with CloudFormation Stack Sets
 1. Deploy required resources
 2. Continue when both stack sets have successfully deployed
@@ -104,4 +105,3 @@ aws lambda add-permission --function-name UpdateSecret --statement-id AlarmActio
 ### Delete primary database and promote the read replica
 1. Delete the primary RDS database in **us-east-1**
 2. Promote the read replica in **us-west-1**
-3. After the rds instance in **us-west-1** returns to the active state, return to the web application and confirm that you can create new orders
