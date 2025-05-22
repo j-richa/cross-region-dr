@@ -1,0 +1,107 @@
+## Task 1: Create Resources with CloudFormation Stack Sets
+1. Deploy required resources
+2. Continue when both stack sets have successfully deployed
+
+
+## Task 2: Create the table on the RDS Primary in us-east-1
+1. Use AWS CloudShell to connect to the database in **us-east-1** using mysql:
+
+```bash
+mysql -h RDS-ENDPOINT -u admin -p
+```
+The password should-be "lab-password"
+
+2. Configure the `sample` database
+
+```sql
+use sample;
+
+show tables;
+```
+
+3. Create a table in the `sample` database
+
+```sql
+CREATE TABLE orders (id INT(6) UNSIGNED AUTO_INCREMENT PRIMARY KEY, ordernumber VARCHAR(30) NOT NULL, customername VARCHAR(30) NOT NULL, address VARCHAR(150) NOT NULL, item VARCHAR(50) NOT NULL, price DECIMAL(10,2) NOT NULL, date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+```
+
+4. Validate the orders tables exists
+
+```sql
+show tables;
+```
+
+5. Connect to the application using the DNS name of the ALB in us-east-1
+6. Use the application one or more orders and then view the orders
+7. View table contents (after adding orders through the app layer)
+
+```sql
+SELECT * FROM orders;
+```
+
+## Task 3: Test the web application in each region
+1. Connect to the application using the DNS name of the ALB in **us-west-1**
+2. Add an order and then view the order
+3. Vaidate that all orders can be seen in the database
+
+
+## Task 4: Create Route 53 Health Checks
+1. Go to Route 53 > Health checks
+2. Create a health check and set the name to `ALB-EAST`
+3. Select to monitor an endpoint and specify by domain name
+4. Set the "Domain name" to the DNS name of the ALB in **us-east-1**
+5. Don't create an alarm, and complete the configuration
+6. Repeat these steps for the ALB in **us-west-1** and name it `ALB-WEST`
+7. Make a note of the ID of the ALB-EAST health check
+
+
+## Task 5: Configure Route 53 Failover Routing Policies
+1. Go to Route 53 > Hosted Zones and select your hosted zone
+2. Create a record named `dr-lab`.  Enable "Alias" and select your ALB in **us-east-1**
+3. Change the Routing policy to "Failover"
+4. Select the ALB-EAST health check
+5. Set the "Failover record type" and "Record ID" to "Primary"
+6. Repeat these steps to create a similar record for your ALB in **us-west-1**, setting "Failover record type" and "Record ID" to "Secondary"
+7. Connect to the application using the `dr-lab.<yourdomainname>` FQDN and view existing records.
+8. On your local computer, use the nslookup command to see the ip addresses returned for the dr-lab FQDN. These should match the Public IPs of the Network Interfaces attached to your ALB in **us-east-1**
+
+
+## Task 6: Automate updating the secret
+
+### Create a Lambda function in the us-east-1 region to update the DB endpoint
+1. Create a Lambda function named `UpdateSecret` with the Python 3.9 runtime and change the execution role to `DRLabLambdaRole`
+2. Add the function code from the `UpdateSecret.py` file
+3. Update the `new_db_endpoint` value in the code with the endpoint of the RDS Read Replica in the **us-west-1** region
+4. Deploy the function
+
+### Create a CloudWatch alarm
+1. Go to CloudWatch and create an alarm
+2. Select a metric and choose Route 53 > Health Check Metrics
+3. Select the "HealthCheckStatus" metric that corresponds to the us-east-1 health check ID
+4. Set the period to 1 minute
+5. Use a static threshold, configure the "Lower" setting and set the value to "1"
+6. Remove the default notification and add a Lambda action
+7. Select the `UpdateSecret` Lambda function and give the same name to the Alarm
+8. Record the ARN of the alarm
+
+### Configure permissions to trigger the Lambda function
+1. Using CloudShell, add a resource based policy to the Lambda function with the following CLI command, substituing your AWS account ID and the ARN of the `UpdateSecret` alarm
+
+```bash
+aws lambda add-permission --function-name UpdateSecret --statement-id AlarmAction --action 'lambda:InvokeFunction' --principal lambda.alarms.cloudwatch.amazonaws.com --source-account <AccountID> --source-arn <CloudWatch-Alarm-ARN>
+```
+
+## Task 7: Simulate failure and test failover
+
+### Break the application layer
+1. Remove the inbound HTTP rule from the ALB-SG in **us-east-1**
+2. Watch the Route 53 Health Check and the CloudWatch alarm
+3. Once the health check is unhealthy and the alarm is triggered the Lambda function should update the secret
+4. Check the secret has been updated
+5. On your local computer, use the nslookup command to see the ip addresses returned for the dr-lab FQDN. These should now match the Public IPs of the Network Interfaces attached to your ALB in **us-west-1**
+6. Connect to the application and attempt to both view and create orders. You should be able to view but not create as the replica DB is read only
+
+### Delete primary database and promote the read replica
+1. Delete the primary RDS database in **us-east-1**
+2. Promote the read replica in **us-west-1**
+3. After the rds instance in **us-west-1** returns to the active state, return to the web application and confirm that you can create new orders

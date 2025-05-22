@@ -1,0 +1,46 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RDS Database Secondary'
+
+Parameters:
+  VpcId:
+    Type: String
+  DBSubnet1:
+    Type: String
+  DBSubnet2:
+    Type: String
+  DBSecurityGroupId:
+    Type: String
+  SourceDBInstanceIdentifier:
+    Type: String
+  SourceDBInstanceRegion:
+    Type: String
+
+Resources:
+  # Subnet group for the RDS instance
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS subnet group
+      DBSubnetGroupName: !Sub "${AWS::StackName}-dbsubnetgroup"
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+      Tags:
+        - Key: Name
+          Value: DBSubnetGroup
+
+  # RDS Read Replica configuration
+  RDSReadReplica:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: replica-db-west
+      DBInstanceClass: db.t3.micro
+      PubliclyAccessible: false
+      SourceDBInstanceIdentifier: !Sub "arn:aws:rds:${SourceDBInstanceRegion}:${AWS::AccountId}:db:${SourceDBInstanceIdentifier}"
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: RDSReadReplica

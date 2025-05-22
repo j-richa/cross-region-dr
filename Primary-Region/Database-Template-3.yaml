@@ -1,0 +1,74 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RDS Database'
+
+Parameters:
+  VpcId:
+    Type: String
+  DBSubnet1:
+    Type: String
+  DBSubnet2:
+    Type: String
+  DBSecurityGroupId:
+    Type: String
+  DBMasterUsername:
+    Type: String
+  DBMasterUserPassword:
+    Type: String
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS subnet group
+      SubnetIds:
+        - !Ref DBSubnet1
+        - !Ref DBSubnet2
+      Tags:
+        - Key: Name
+          Value: DBSubnetGroup
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: primary-db
+      Engine: mysql
+      EngineVersion: 8.0
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroupId
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      MultiAZ: false
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+      StorageType: gp2
+      Tags:
+        - Key: Name
+          Value: RDSPrimary
+
+  RDSReadReplica:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: replica-db
+      SourceDBInstanceIdentifier: !Ref RDSInstance
+      DBInstanceClass: db.t3.micro
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: RDSReadReplica
+
+  RDSSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: db-secret
+      SecretString: !Sub '{"username":"${DBMasterUsername}","password":"${DBMasterUserPassword}"}'
+
+  AttachSecret:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSSecret
+      TargetId: !Ref RDSInstance
+      TargetType: AWS::RDS::DBInstance
